@@ -11,6 +11,17 @@ import os
 from PIL import Image
 import io
 import numpy as np
+import gc
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Configure TensorFlow for memory optimization
+tf.config.experimental.set_memory_growth(tf.config.list_physical_devices('GPU')[0], True) if tf.config.list_physical_devices('GPU') else None
+tf.config.threading.set_inter_op_parallelism_threads(1)
+tf.config.threading.set_intra_op_parallelism_threads(1)
 
 app = Flask(__name__)
 
@@ -22,16 +33,22 @@ class PestModelManager:
         self.load_model()
     
     def load_model(self):
-        """Load the trained pest detection model"""
+        """Load the trained pest detection model with memory optimization"""
         try:
-            # Load model
-            self.model = tf.keras.models.load_model('filtered_pest_model_best.h5', compile=False)
+            logger.info("Loading pest detection model...")
+            
+            # Load model with optimizations
+            self.model = tf.keras.models.load_model(
+                'filtered_pest_model_best.h5', 
+                compile=False,
+                options=tf.saved_model.LoadOptions(experimental_io_device='/cpu:0')
+            )
             
             # Build model with sample input
             sample_input = tf.random.normal((1,) + self.input_shape)
             _ = self.model(sample_input)
             
-            # Compile model
+            # Compile model with minimal configuration
             self.model.compile(
                 optimizer='adam',
                 loss='categorical_crossentropy',
@@ -43,12 +60,15 @@ class PestModelManager:
                 model_info = json.load(f)
                 self.class_names = model_info['class_names']
             
-            print(f"✅ Pest detection model loaded successfully!")
-            print(f"   Classes: {len(self.class_names)}")
-            print(f"   Input shape: {self.input_shape}")
+            # Clear memory
+            gc.collect()
+            
+            logger.info(f"✅ Pest detection model loaded successfully!")
+            logger.info(f"   Classes: {len(self.class_names)}")
+            logger.info(f"   Input shape: {self.input_shape}")
             
         except Exception as e:
-            print(f"❌ Error loading pest model: {e}")
+            logger.error(f"❌ Error loading pest model: {e}")
             self.model = None
             self.class_names = None
     
@@ -69,7 +89,7 @@ class PestModelManager:
             return None
     
     def predict_pest(self, image_file):
-        """Predict pest type from image"""
+        """Predict pest type from image with memory optimization"""
         if not self.model:
             return None, "Model not loaded"
         
@@ -79,8 +99,11 @@ class PestModelManager:
             return None, "Error preprocessing image"
         
         try:
-            # Make prediction
-            predictions = self.model.predict(processed_image, verbose=0)
+            logger.info("Making prediction...")
+            
+            # Make prediction with memory optimization
+            with tf.device('/cpu:0'):
+                predictions = self.model.predict(processed_image, verbose=0, batch_size=1)
             
             # Get top prediction
             predicted_class_index = np.argmax(predictions[0])
@@ -100,6 +123,13 @@ class PestModelManager:
             # Categorize by crop
             crop = self.categorize_pest_by_crop(predicted_class_name)
             
+            # Clear memory after prediction
+            del processed_image
+            del predictions
+            gc.collect()
+            
+            logger.info(f"Prediction completed: {predicted_class_name} ({confidence:.3f})")
+            
             return {
                 'predicted_pest': predicted_class_name,
                 'confidence': confidence,
@@ -108,6 +138,7 @@ class PestModelManager:
             }, None
             
         except Exception as e:
+            logger.error(f"Prediction error: {e}")
             return None, f"Prediction error: {e}"
     
     def categorize_pest_by_crop(self, pest_name):
@@ -136,29 +167,48 @@ def index():
 @app.route('/api/pest/predict', methods=['POST'])
 def predict_pest():
     """Predict pest type from uploaded image"""
-    if not pest_manager.model:
-        return jsonify({"error": "Pest detection model not loaded"}), 500
-    
-    if 'image' not in request.files:
-        return jsonify({"error": "No image file provided"}), 400
-    
-    image_file = request.files['image']
-    if image_file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-    
     try:
+        logger.info("Received prediction request")
+        
+        if not pest_manager.model:
+            logger.error("Model not loaded")
+            return jsonify({"error": "Pest detection model not loaded"}), 500
+        
+        if 'image' not in request.files:
+            logger.error("No image file provided")
+            return jsonify({"error": "No image file provided"}), 400
+        
+        image_file = request.files['image']
+        if image_file.filename == '':
+            logger.error("No selected file")
+            return jsonify({"error": "No selected file"}), 400
+        
+        # Check file size (limit to 10MB)
+        image_file.seek(0, 2)  # Seek to end
+        file_size = image_file.tell()
+        image_file.seek(0)  # Reset to beginning
+        
+        if file_size > 10 * 1024 * 1024:  # 10MB limit
+            logger.error(f"File too large: {file_size} bytes")
+            return jsonify({"error": "File too large. Please upload an image smaller than 10MB."}), 400
+        
+        logger.info(f"Processing image: {image_file.filename} ({file_size} bytes)")
+        
         result, error = pest_manager.predict_pest(image_file)
         
         if error:
+            logger.error(f"Prediction failed: {error}")
             return jsonify({"error": error}), 500
         
+        logger.info("Prediction successful")
         return jsonify({
             "success": True,
             "prediction": result
         })
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Unexpected error in prediction endpoint: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 @app.route('/api/pest/classes')
 def get_pest_classes():
@@ -191,7 +241,8 @@ def get_status():
         "api_status": "running",
         "model_loaded": pest_manager.model is not None,
         "tensorflow_version": tf.__version__,
-        "total_classes": len(pest_manager.class_names) if pest_manager.class_names else 0
+        "total_classes": len(pest_manager.class_names) if pest_manager.class_names else 0,
+        "memory_usage": "optimized"
     }
     
     if pest_manager.class_names:
@@ -199,6 +250,11 @@ def get_status():
         status["input_shape"] = pest_manager.input_shape
     
     return jsonify(status)
+
+@app.route('/health')
+def health_check():
+    """Simple health check endpoint"""
+    return jsonify({"status": "healthy", "model_loaded": pest_manager.model is not None})
 
 @app.route('/test')
 def test_interface():
