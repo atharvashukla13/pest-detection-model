@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pest Classes Information - AgriMitra</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+      .main-container {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        margin: 2rem auto;
+        padding: 3rem;
+        max-width: 1200px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+      .header h1 {
+        color: #2c3e50;
+        font-weight: 700;
+        margin-bottom: 1rem;
+      }
+      .crop-section {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+      .crop-header {
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1.5rem;
+        color: white;
+      }
+      .crop-rice {
+        background: linear-gradient(45deg, #27ae60, #2ecc71);
+      }
+      .crop-wheat {
+        background: linear-gradient(45deg, #f39c12, #e67e22);
+      }
+      .crop-cotton {
+        background: linear-gradient(45deg, #e74c3c, #c0392b);
+      }
+      .crop-sugarcane {
+        background: linear-gradient(45deg, #3498db, #2980b9);
+      }
+
+      .pest-item {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 4px solid #3498db;
+        transition: transform 0.2s ease;
+      }
+      .pest-item:hover {
+        transform: translateX(5px);
+      }
+      .pest-item.rice {
+        border-left-color: #27ae60;
+      }
+      .pest-item.wheat {
+        border-left-color: #f39c12;
+      }
+      .pest-item.cotton {
+        border-left-color: #e74c3c;
+      }
+      .pest-item.sugarcane {
+        border-left-color: #3498db;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 2rem 0;
+      }
+      .stat-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      }
+      .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #3498db;
+      }
+      .btn-custom {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        border: none;
+        border-radius: 25px;
+        padding: 0.8rem 2rem;
+        color: white;
+        font-weight: 600;
+        transition: transform 0.3s ease;
+      }
+      .btn-custom:hover {
+        transform: translateY(-2px);
+        color: white;
+      }
+      .loading {
+        text-align: center;
+        padding: 2rem;
+      }
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="main-container">
+        <div class="header">
+          <h1><i class="fas fa-bug"></i> Pest Classes Information</h1>
+          <p>Complete list of supported pest classes organized by crop type</p>
+        </div>
+
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>Loading pest classes...</p>
+        </div>
+
+        <div id="content" style="display: none">
+          <div class="stats-grid" id="statsGrid">
+            <!-- Stats will be loaded here -->
+          </div>
+
+          <div id="cropSections">
+            <!-- Crop sections will be loaded here -->
+          </div>
+
+          <div class="text-center mt-4">
+            <a href="/test" class="btn btn-custom">
+              <i class="fas fa-upload"></i> Test Model
+            </a>
+            <a href="/" class="btn btn-outline-secondary ms-2">
+              <i class="fas fa-home"></i> Back to Home
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        loadPestClasses();
+      });
+
+      function loadPestClasses() {
+        fetch("/api/pest/classes")
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.crop_categories) {
+              displayPestClasses(data);
+            } else {
+              alert("Error loading pest classes: " + data.error);
+            }
+          })
+          .catch((error) => {
+            alert("Error: " + error.message);
+          });
+      }
+
+      function displayPestClasses(data) {
+        const loading = document.getElementById("loading");
+        const content = document.getElementById("content");
+
+        loading.style.display = "none";
+        content.style.display = "block";
+
+        // Display stats
+        const statsGrid = document.getElementById("statsGrid");
+        statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${data.total_classes}</div>
+                    <div>Total Pest Classes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">4</div>
+                    <div>Crop Types</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${
+                      data.crop_categories.Rice
+                        ? data.crop_categories.Rice.length
+                        : 0
+                    }</div>
+                    <div>Rice Pests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${
+                      data.crop_categories.Wheat
+                        ? data.crop_categories.Wheat.length
+                        : 0
+                    }</div>
+                    <div>Wheat Pests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${
+                      data.crop_categories.Cotton
+                        ? data.crop_categories.Cotton.length
+                        : 0
+                    }</div>
+                    <div>Cotton Pests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${
+                      data.crop_categories.Sugarcane
+                        ? data.crop_categories.Sugarcane.length
+                        : 0
+                    }</div>
+                    <div>Sugarcane Pests</div>
+                </div>
+            `;
+
+        // Display crop sections
+        const cropSections = document.getElementById("cropSections");
+        cropSections.innerHTML = "";
+
+        const cropOrder = ["Rice", "Wheat", "Cotton", "Sugarcane"];
+        const cropIcons = {
+          Rice: "fas fa-seedling",
+          Wheat: "fas fa-wheat-awn",
+          Cotton: "fas fa-tshirt",
+          Sugarcane: "fas fa-leaf",
+        };
+
+        cropOrder.forEach((crop) => {
+          if (
+            data.crop_categories[crop] &&
+            data.crop_categories[crop].length > 0
+          ) {
+            const section = createCropSection(
+              crop,
+              data.crop_categories[crop],
+              cropIcons[crop]
+            );
+            cropSections.appendChild(section);
+          }
+        });
+      }
+
+      function createCropSection(crop, pests, icon) {
+        const section = document.createElement("div");
+        section.className = "crop-section";
+
+        const cropClass = crop.toLowerCase();
+
+        section.innerHTML = `
+                <div class="crop-header crop-${cropClass}">
+                    <h3><i class="${icon}"></i> ${crop} Pests</h3>
+                    <p class="mb-0">${pests.length} pest types detected</p>
+                </div>
+                <div class="pest-list">
+                    ${pests
+                      .map(
+                        (pest) => `
+                        <div class="pest-item ${cropClass}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">${pest}</h6>
+                                    <small class="text-muted">${crop} pest</small>
+                                </div>
+                                <i class="fas fa-bug text-muted"></i>
+                            </div>
+                        </div>
+                    `
+                      )
+                      .join("")}
+                </div>
+            `;
+
+        return section;
+      }
+    </script>
+  </body>
+</html>
+

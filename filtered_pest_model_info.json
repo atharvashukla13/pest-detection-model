@@ -1,0 +1,37 @@
+{
+  "class_names": [
+    "asiatic rice borer",
+    "bollworm",
+    "brown plant hopper",
+    "paddy stem maggot",
+    "rice gall midge",
+    "rice leaf caterpillar",
+    "rice leaf roller",
+    "rice leafhopper",
+    "rice shell pest",
+    "rice water weevil",
+    "sawfly",
+    "small brown plant hopper",
+    "stem borer",
+    "wheat blossom midge",
+    "wheat phloeothrips",
+    "wheat sawfly",
+    "white backed plant hopper",
+    "whitefly",
+    "yellow rice borer"
+  ],
+  "num_classes": 19,
+  "input_shape": [
+    224,
+    224,
+    3
+  ],
+  "total_parameters": 533715,
+  "model_architecture": "Efficient CNN for Rice, Wheat, Sugarcane, Cotton pests",
+  "crops": [
+    "rice",
+    "wheat",
+    "sugarcane",
+    "cotton"
+  ]
+}
